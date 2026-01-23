@@ -100,20 +100,20 @@ function advanceTime() {
 const locations = {
   apartment: {
     name: "Your Apartment",
-    description: () => `A small starter apartment in ${playerCity}.`,
+    description: () => `A small starter apartment in ${playerCity}.`
   },
   city: {
     name: "City Center",
-    description: () => "Shops, traffic, and people everywhere.",
+    description: () => "Shops, traffic, and people everywhere."
   },
   store: {
     name: "Grocery Store",
-    description: () => "Buy food to reduce hunger.",
+    description: () => "Buy food to reduce hunger."
   },
   work: {
     name: "Workplace",
-    description: () => "Earn money here during the day.",
-  },
+    description: () => "Earn money here during the day."
+  }
 };
 
 let currentLocation = "apartment";
@@ -130,14 +130,30 @@ function renderMap() {
   `;
 }
 
-// TRAVEL FUNCTION
+// TRAVEL FUNCTION (UPDATED WITH MONEY CHANGES)
 function travel(place) {
   currentLocation = place;
+
+  // Money changes based on location
+  if (place === "work") {
+    player.money += 20;
+  } else if (place === "store") {
+    player.money -= 20;
+  } else if (place === "apartment") {
+    player.money -= 20;
+  } else if (place === "city") {
+    player.money -= 20;
+  }
+
+  // Update the world text
   const world = document.getElementById("world");
   world.innerHTML = `
     <h3>${locations[place].name}</h3>
     <p>${locations[place].description()}</p>
   `;
+
+  // Update stats after money changes
+  updateStats();
 }
 
 // START GAME FUNCTION
