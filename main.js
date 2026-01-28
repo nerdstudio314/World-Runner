@@ -176,8 +176,13 @@ function travel(place) {
   updateStats();
 }
 
-// Improved tick logic: tick every 10s, use timestamps.
-// Mapping: 1000 ms real = 1 in-game minute -> 60000 ms real = 60 in-game minutes = 1 in-game hour.
+// TICK LOGIC: convert real time -> in-game minutes
+// New mapping requested:
+//   30 real seconds = 1 in-game hour (60 in-game minutes)
+// => 1 real second = 2 in-game minutes
+// => 1 in-game minute = 0.5 real seconds = 500 ms
+const MS_PER_INGAME_MINUTE = 500;
+
 let tickIntervalId = null;
 let lastTickTime = null;
 let accumulatedMs = 0;
@@ -187,7 +192,6 @@ function tickTime() {
 
   if (!lastTickTime) {
     lastTickTime = now;
-    // update UI immediately
     updateStats();
     return;
   }
@@ -196,13 +200,13 @@ function tickTime() {
   lastTickTime = now;
   accumulatedMs += delta;
 
-  // Calculate how many in-game minutes to add (1 in-game minute per 1000 ms real)
-  const minutesToAdd = Math.floor(accumulatedMs / 1000);
+  // How many in-game minutes to add?
+  const minutesToAdd = Math.floor(accumulatedMs / MS_PER_INGAME_MINUTE);
   if (minutesToAdd > 0) {
-    accumulatedMs -= minutesToAdd * 1000;
+    accumulatedMs -= minutesToAdd * MS_PER_INGAME_MINUTE;
     advanceTimeByMinutes(minutesToAdd);
   } else {
-    // If no minute advanced, still refresh UI so it updates every tick
+    // refresh UI so minutes appear to move (even if not yet a full in-game minute)
     updateStats();
   }
 }
@@ -218,6 +222,7 @@ function startGame() {
   lastTickTime = null;
   accumulatedMs = 0;
 
-  // Tick every 10 real seconds (the conversion uses actual elapsed ms so it's robust)
-  tickIntervalId = setInterval(tickTime, 10000);
+  // Use a short tick so the UI updates smoothly.
+  // With MS_PER_INGAME_MINUTE = 500, setting interval to 250ms keeps responsive UI.
+  tickIntervalId = setInterval(tickTime, 250);
 }
