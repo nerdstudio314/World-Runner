@@ -64,6 +64,7 @@ const player = {
   day: 1,
   hour: 8, // start at 8 AM
   totalSpent: 0, // track total money spent
+  totalEarned: 0 // track total money earned
 };
 
 // UPDATE STATS UI
@@ -77,6 +78,7 @@ function updateStats() {
     <p>Day: ${player.day}</p>
     <p>Time: ${formattedHour} (${isDaytime ? "Daytime" : "Nighttime"})</p>
     <p>Money: $${player.money}</p>
+    <p>Total Earned: $${player.totalEarned}</p>
     <p>Total Spent: $${player.totalSpent}</p>
     <p>Energy: ${player.energy}</p>
     <p>Hunger: ${player.hunger}</p>
@@ -132,7 +134,7 @@ function renderMap() {
   `;
 }
 
-// TRAVEL FUNCTION (UPDATED WITH MONEY CHANGES AND SPENT TRACKING)
+// TRAVEL FUNCTION (UPDATED WITH MONEY CHANGES AND SPENT/earned TRACKING)
 function travel(place) {
   currentLocation = place;
 
@@ -141,6 +143,7 @@ function travel(place) {
   if (place === "work") {
     changeAmount = 20;
     player.money += changeAmount;
+    player.totalEarned += changeAmount; // Track earned
   } else if (place === "store") {
     changeAmount = -20;
     player.money += changeAmount;
