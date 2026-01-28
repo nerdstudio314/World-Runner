@@ -1,3 +1,4 @@
+// (updated main.js)
 console.log("World Runner JS loaded");
 
 // SCREEN ELEMENTS
@@ -24,7 +25,7 @@ document.getElementById("settings-btn").addEventListener("click", () => {
   alert("Settings coming soon");
 });
 
-// START / TAX CONFIG
+// TAX & TIMING CONFIG
 const TAX_AMOUNT = 1000;
 const TAX_HOUR = 8; // taxes charged at 08:00 each day
 
@@ -36,12 +37,28 @@ const player = {
   day: 1,
   hour: 8,     // start at 08:00
   minute: 0,
-  second: 0,   // track seconds now
+  second: 0,
   totalSpent: 0,
   totalEarned: 0,
-  lastTaxDay: 1,           // last day taxes were charged (start at current day so we don't charge immediately)
+  lastTaxDay: 1,           // last day taxes were charged
   energyPenaltyCounter: 0, // counts in-game seconds for energy penalty when hungry
 };
+
+// small function to post temporary notifications in the world area (helpful to see events)
+function postWorldMessage(text, timeout = 5000) {
+  const world = document.getElementById("world");
+  if (!world) return;
+  const msg = document.createElement("div");
+  msg.className = "world-msg";
+  msg.style.marginTop = "8px";
+  msg.style.padding = "8px";
+  msg.style.background = "#fffef0";
+  msg.style.border = "1px solid #efe0b0";
+  msg.style.borderRadius = "6px";
+  msg.textContent = text;
+  world.appendChild(msg);
+  setTimeout(() => msg.remove(), timeout);
+}
 
 // UPDATE STATS UI (shows HH:MM)
 function updateStats() {
@@ -74,6 +91,8 @@ function advanceTimeBySeconds(seconds = 1) {
     return;
   }
 
+  // We'll advance in a per-second loop (seconds per tick are usually small;
+  // this keeps logic simple and makes hunger/energy transitions precise).
   for (let i = 0; i < seconds; i++) {
     // advance one in-game second
     player.second += 1;
@@ -83,20 +102,22 @@ function advanceTimeBySeconds(seconds = 1) {
       player.minute += 1;
     }
 
+    // hour rollover
     if (player.minute >= 60) {
       player.minute = 0;
       player.hour += 1;
 
       // Each in-game hour -> +10 hunger
       player.hunger += 10;
+      postWorldMessage(`Hour passed: hunger +10 -> ${player.hunger}`, 3000);
     }
 
+    // day rollover
     if (player.hour >= 24) {
       player.hour = player.hour % 24;
       player.day += 1;
-      // Reset energy at new day (existing behavior)
-      player.energy = 100;
-      // When day advances we don't additionally change hunger here (hours already handled)
+      player.energy = 100; // reset energy at new day (existing behavior)
+      // don't change hunger here (hours already handled)
     }
 
     // Tax check: if it's exactly TAX_HOUR:00:00 and we haven't charged for this day yet
@@ -109,23 +130,7 @@ function advanceTimeBySeconds(seconds = 1) {
       player.money -= TAX_AMOUNT;
       player.totalSpent += TAX_AMOUNT;
       player.lastTaxDay = player.day;
-
-      // Show a temporary notification in the world area (if available)
-      const world = document.getElementById("world");
-      if (world) {
-        const msg = document.createElement("div");
-        msg.className = "tax-msg";
-        msg.style.marginTop = "8px";
-        msg.style.padding = "8px";
-        msg.style.background = "#fff3f3";
-        msg.style.border = "1px solid #f5c2c2";
-        msg.style.borderRadius = "6px";
-        msg.textContent = `Taxes paid at ${TAX_HOUR}:00 — $${TAX_AMOUNT}`;
-        world.appendChild(msg);
-        setTimeout(() => {
-          msg.remove();
-        }, 6000);
-      }
+      postWorldMessage(`Taxes paid at ${TAX_HOUR}:00 — $${TAX_AMOUNT}`, 5000);
     }
 
     // Energy penalty when hunger >= 50: every 5 in-game seconds, -1 energy
@@ -134,9 +139,10 @@ function advanceTimeBySeconds(seconds = 1) {
       if (player.energyPenaltyCounter >= 5) {
         player.energy = Math.max(0, player.energy - 1);
         player.energyPenaltyCounter = 0;
+        postWorldMessage(`Energy -1 due to hunger (hunger=${player.hunger}). Energy=${player.energy}`, 2500);
       }
     } else {
-      // Reset counter if hunger drops below threshold
+      // reset counter if hunger drops below threshold
       player.energyPenaltyCounter = 0;
     }
   }
