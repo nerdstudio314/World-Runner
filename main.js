@@ -57,6 +57,9 @@ document.getElementById("start-game-btn").addEventListener("click", () => {
 });
 
 // PLAYER STATS
+const TAX_AMOUNT = 1000;
+const TAX_HOUR = 8; // 08:00 each day
+
 const player = {
   money: 10000,
   energy: 100,
@@ -90,12 +93,17 @@ function updateStats() {
 }
 
 // ADVANCE TIME BY MINUTES (rollover minutes -> hours -> days)
+// Now charges taxes at 08:00 each in-game day: $1000 at 08:00
 function advanceTimeByMinutes(minutes = 1) {
   if (minutes <= 0) {
     updateStats();
     return;
   }
 
+  // Compute previous absolute minutes since day 1 start
+  const prevTotalMinutes = (player.day - 1) * 24 * 60 + player.hour * 60 + player.minute;
+
+  // Apply minute advancement
   player.minute += minutes;
 
   if (player.minute >= 60) {
@@ -110,6 +118,41 @@ function advanceTimeByMinutes(minutes = 1) {
     player.day += extraDays;
     player.energy = 100;
     player.hunger += 10 * extraDays;
+  }
+
+  // Compute new absolute minutes
+  const newTotalMinutes = (player.day - 1) * 24 * 60 + player.hour * 60 + player.minute;
+
+  // Determine how many times we've crossed 08:00 (8*60 = 480 minutes offset into each day)
+  // Find integers j such that j*1440 + 480 is in (prevTotalMinutes, newTotalMinutes]
+  const OFFSET = TAX_HOUR * 60; // 480
+  const DAY_MINUTES = 24 * 60;
+
+  const firstJ = Math.floor((prevTotalMinutes - OFFSET) / DAY_MINUTES) + 1;
+  const lastJ = Math.floor((newTotalMinutes - OFFSET) / DAY_MINUTES);
+  let taxCount = Math.max(0, lastJ - firstJ + 1);
+
+  if (taxCount > 0) {
+    const taxAmount = TAX_AMOUNT * taxCount;
+    player.money -= taxAmount;
+    player.totalSpent += taxAmount;
+
+    // Show a temporary notification in the world area (if available)
+    const world = document.getElementById("world");
+    if (world) {
+      const msg = document.createElement("div");
+      msg.className = "tax-msg";
+      msg.style.marginTop = "8px";
+      msg.style.padding = "8px";
+      msg.style.background = "#fff3f3";
+      msg.style.border = "1px solid #f5c2c2";
+      msg.style.borderRadius = "6px";
+      msg.textContent = `Taxes paid for ${taxCount} day(s) at ${TAX_HOUR}:00 — $${taxAmount}`;
+      world.appendChild(msg);
+      setTimeout(() => {
+        msg.remove();
+      }, 6000);
+    }
   }
 
   updateStats();
@@ -177,9 +220,7 @@ function travel(place) {
 }
 
 // TICK LOGIC: convert real time -> in-game minutes
-// New mapping requested:
-//   30 real seconds = 1 in-game hour (60 in-game minutes)
-// => 1 real second = 2 in-game minutes
+// Mapping set so 30 real seconds = 1 in-game hour (60 in-game minutes)
 // => 1 in-game minute = 0.5 real seconds = 500 ms
 const MS_PER_INGAME_MINUTE = 500;
 
@@ -223,6 +264,5 @@ function startGame() {
   accumulatedMs = 0;
 
   // Use a short tick so the UI updates smoothly.
-  // With MS_PER_INGAME_MINUTE = 500, setting interval to 250ms keeps responsive UI.
   tickIntervalId = setInterval(tickTime, 250);
 }
