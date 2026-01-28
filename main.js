@@ -63,6 +63,7 @@ const player = {
   hunger: 0,
   day: 1,
   hour: 8, // start at 8 AM
+  totalSpent: 0, // track total money spent
 };
 
 // UPDATE STATS UI
@@ -76,6 +77,7 @@ function updateStats() {
     <p>Day: ${player.day}</p>
     <p>Time: ${formattedHour} (${isDaytime ? "Daytime" : "Nighttime"})</p>
     <p>Money: $${player.money}</p>
+    <p>Total Spent: $${player.totalSpent}</p>
     <p>Energy: ${player.energy}</p>
     <p>Hunger: ${player.hunger}</p>
     <p>City: ${playerCity}</p>
@@ -130,19 +132,29 @@ function renderMap() {
   `;
 }
 
-// TRAVEL FUNCTION (UPDATED WITH MONEY CHANGES)
+// TRAVEL FUNCTION (UPDATED WITH MONEY CHANGES AND SPENT TRACKING)
 function travel(place) {
   currentLocation = place;
 
   // Money changes based on location
+  let changeAmount = 0;
   if (place === "work") {
-    player.money += 20;
+    changeAmount = 20;
+    player.money += changeAmount;
   } else if (place === "store") {
-    player.money -= 20;
+    changeAmount = -20;
+    player.money += changeAmount;
   } else if (place === "apartment") {
-    player.money -= 20;
+    changeAmount = -20;
+    player.money += changeAmount;
   } else if (place === "city") {
-    player.money -= 20;
+    changeAmount = -20;
+    player.money += changeAmount;
+  }
+
+  // If money decreased, add to totalSpent
+  if (changeAmount < 0) {
+    player.totalSpent += Math.abs(changeAmount);
   }
 
   // Update the world text
