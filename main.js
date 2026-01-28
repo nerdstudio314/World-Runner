@@ -86,18 +86,38 @@ function updateStats() {
   `;
 }
 
-// ADVANCE TIME (1 real minute = 1 in-game hour)
-function advanceTime() {
-  player.hour++;
+// ADVANCE TIME BY ONE HOUR (keeps existing rollover logic)
+function advanceTimeByHours(hours = 1) {
+  player.hour += hours;
 
   if (player.hour >= 24) {
-    player.hour = 0;
-    player.day++;
+    // handle multiple-day increments properly
+    const extraDays = Math.floor(player.hour / 24);
+    player.hour = player.hour % 24;
+    player.day += extraDays;
     player.energy = 100;
-    player.hunger += 10;
+    player.hunger += 10 * extraDays;
   }
 
   updateStats();
+}
+
+// We'll tick every 10 seconds, but only convert 60 real seconds -> 1 in-game hour.
+// Use an accumulator so 1 minute (60s) remains 1 in-game hour while updating UI every 10s.
+let accumulatedSeconds = 0;
+function tickTime() {
+  // called every 10 real seconds
+  accumulatedSeconds += 10;
+
+  // If we've accumulated at least 60 seconds, convert to in-game hours
+  if (accumulatedSeconds >= 60) {
+    const hoursToAdd = Math.floor(accumulatedSeconds / 60); // normally 1
+    accumulatedSeconds -= hoursToAdd * 60;
+    advanceTimeByHours(hoursToAdd);
+  } else {
+    // still update the UI so the display refreshes every 10 seconds
+    updateStats();
+  }
 }
 
 // MAP LOCATIONS
@@ -135,13 +155,14 @@ function renderMap() {
 }
 
 // TRAVEL FUNCTION (UPDATED WITH MONEY CHANGES AND SPENT/earned TRACKING)
+// Note: Work gives $10 per click. Other locations still cost $20.
 function travel(place) {
   currentLocation = place;
 
   // Money changes based on location
   let changeAmount = 0;
   if (place === "work") {
-    changeAmount = 20;
+    changeAmount = 10; // work earnings
     player.money += changeAmount;
     player.totalEarned += changeAmount; // Track earned
   } else if (place === "store") {
@@ -172,11 +193,15 @@ function travel(place) {
 }
 
 // START GAME FUNCTION
+let tickIntervalId = null;
 function startGame() {
   updateStats();
   renderMap();
   travel("apartment");
 
-  // 1 real minute = 1 in-game hour
-  setInterval(advanceTime, 60000);
+  // Clear any existing interval
+  if (tickIntervalId) clearInterval(tickIntervalId);
+
+  // Call tickTime every 10 real seconds. 60 real seconds still equals 1 in-game hour.
+  tickIntervalId = setInterval(tickTime, 10000);
 }
