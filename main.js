@@ -86,12 +86,11 @@ function updateStats() {
   `;
 }
 
-// ADVANCE TIME BY ONE HOUR (keeps existing rollover logic)
+// ADVANCE TIME BY HOURS (keeps rollover logic)
 function advanceTimeByHours(hours = 1) {
   player.hour += hours;
 
   if (player.hour >= 24) {
-    // handle multiple-day increments properly
     const extraDays = Math.floor(player.hour / 24);
     player.hour = player.hour % 24;
     player.day += extraDays;
@@ -100,24 +99,6 @@ function advanceTimeByHours(hours = 1) {
   }
 
   updateStats();
-}
-
-// We'll tick every 10 seconds, but only convert 60 real seconds -> 1 in-game hour.
-// Use an accumulator so 1 minute (60s) remains 1 in-game hour while updating UI every 10s.
-let accumulatedSeconds = 0;
-function tickTime() {
-  // called every 10 real seconds
-  accumulatedSeconds += 10;
-
-  // If we've accumulated at least 60 seconds, convert to in-game hours
-  if (accumulatedSeconds >= 60) {
-    const hoursToAdd = Math.floor(accumulatedSeconds / 60); // normally 1
-    accumulatedSeconds -= hoursToAdd * 60;
-    advanceTimeByHours(hoursToAdd);
-  } else {
-    // still update the UI so the display refreshes every 10 seconds
-    updateStats();
-  }
 }
 
 // MAP LOCATIONS
@@ -154,54 +135,75 @@ function renderMap() {
   `;
 }
 
-// TRAVEL FUNCTION (UPDATED WITH MONEY CHANGES AND SPENT/earned TRACKING)
-// Note: Work gives $10 per click. Other locations still cost $20.
+// TRAVEL FUNCTION (money: work +$10; other places -$20)
 function travel(place) {
   currentLocation = place;
 
-  // Money changes based on location
   let changeAmount = 0;
   if (place === "work") {
-    changeAmount = 10; // work earnings
+    changeAmount = 10; // earnings
     player.money += changeAmount;
-    player.totalEarned += changeAmount; // Track earned
-  } else if (place === "store") {
-    changeAmount = -20;
-    player.money += changeAmount;
-  } else if (place === "apartment") {
-    changeAmount = -20;
-    player.money += changeAmount;
-  } else if (place === "city") {
+    player.totalEarned += changeAmount;
+  } else if (place === "store" || place === "apartment" || place === "city") {
     changeAmount = -20;
     player.money += changeAmount;
   }
 
-  // If money decreased, add to totalSpent
   if (changeAmount < 0) {
     player.totalSpent += Math.abs(changeAmount);
   }
 
-  // Update the world text
   const world = document.getElementById("world");
   world.innerHTML = `
     <h3>${locations[place].name}</h3>
     <p>${locations[place].description()}</p>
   `;
 
-  // Update stats after money changes
   updateStats();
 }
 
-// START GAME FUNCTION
+// Improved tick logic: tick every 10s, use timestamps, 60000ms -> 1 in-game hour
 let tickIntervalId = null;
+let lastTickTime = null;
+let accumulatedMs = 0;
+
+function tickTime() {
+  const now = Date.now();
+
+  if (!lastTickTime) {
+    lastTickTime = now;
+    // still call update so UI refresh occurs immediately on first tick
+    updateStats();
+    return;
+  }
+
+  const delta = now - lastTickTime;
+  lastTickTime = now;
+  accumulatedMs += delta;
+
+  // Update UI every tick (so it refreshes every ~10s)
+  updateStats();
+
+  // For every 60000 ms accumulated, add one in-game hour
+  if (accumulatedMs >= 60000) {
+    const hoursToAdd = Math.floor(accumulatedMs / 60000);
+    accumulatedMs -= hoursToAdd * 60000;
+    advanceTimeByHours(hoursToAdd);
+    console.log(`Advanced ${hoursToAdd} in-game hour(s). Current hour: ${player.hour}`);
+  }
+}
+
+// START GAME FUNCTION
 function startGame() {
   updateStats();
   renderMap();
   travel("apartment");
 
-  // Clear any existing interval
+  // Clear any old interval if present
   if (tickIntervalId) clearInterval(tickIntervalId);
+  lastTickTime = null;
+  accumulatedMs = 0;
 
-  // Call tickTime every 10 real seconds. 60 real seconds still equals 1 in-game hour.
+  // Tick every 10 real seconds
   tickIntervalId = setInterval(tickTime, 10000);
 }
