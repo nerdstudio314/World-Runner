@@ -62,21 +62,24 @@ const player = {
   energy: 100,
   hunger: 0,
   day: 1,
-  hour: 8, // start at 8 AM
+  hour: 8,    // start at 8 AM
+  minute: 0,  // track minutes now
   totalSpent: 0, // track total money spent
   totalEarned: 0 // track total money earned
 };
 
-// UPDATE STATS UI
+// UPDATE STATS UI (now shows minutes)
 function updateStats() {
   const stats = document.getElementById("stats");
 
-  const formattedHour = player.hour.toString().padStart(2, "0") + ":00";
+  const hh = player.hour.toString().padStart(2, "0");
+  const mm = player.minute.toString().padStart(2, "0");
+  const formattedTime = `${hh}:${mm}`;
   const isDaytime = player.hour >= 6 && player.hour < 18;
 
   stats.innerHTML = `
     <p>Day: ${player.day}</p>
-    <p>Time: ${formattedHour} (${isDaytime ? "Daytime" : "Nighttime"})</p>
+    <p>Time: ${formattedTime} (${isDaytime ? "Daytime" : "Nighttime"})</p>
     <p>Money: $${player.money}</p>
     <p>Total Earned: $${player.totalEarned}</p>
     <p>Total Spent: $${player.totalSpent}</p>
@@ -86,9 +89,20 @@ function updateStats() {
   `;
 }
 
-// ADVANCE TIME BY HOURS (keeps rollover logic)
-function advanceTimeByHours(hours = 1) {
-  player.hour += hours;
+// ADVANCE TIME BY MINUTES (rollover minutes -> hours -> days)
+function advanceTimeByMinutes(minutes = 1) {
+  if (minutes <= 0) {
+    updateStats();
+    return;
+  }
+
+  player.minute += minutes;
+
+  if (player.minute >= 60) {
+    const extraHours = Math.floor(player.minute / 60);
+    player.minute = player.minute % 60;
+    player.hour += extraHours;
+  }
 
   if (player.hour >= 24) {
     const extraDays = Math.floor(player.hour / 24);
@@ -162,7 +176,8 @@ function travel(place) {
   updateStats();
 }
 
-// Improved tick logic: tick every 10s, use timestamps, 60000ms -> 1 in-game hour
+// Improved tick logic: tick every 10s, use timestamps.
+// Mapping: 1000 ms real = 1 in-game minute -> 60000 ms real = 60 in-game minutes = 1 in-game hour.
 let tickIntervalId = null;
 let lastTickTime = null;
 let accumulatedMs = 0;
@@ -172,7 +187,7 @@ function tickTime() {
 
   if (!lastTickTime) {
     lastTickTime = now;
-    // still call update so UI refresh occurs immediately on first tick
+    // update UI immediately
     updateStats();
     return;
   }
@@ -181,15 +196,14 @@ function tickTime() {
   lastTickTime = now;
   accumulatedMs += delta;
 
-  // Update UI every tick (so it refreshes every ~10s)
-  updateStats();
-
-  // For every 60000 ms accumulated, add one in-game hour
-  if (accumulatedMs >= 60000) {
-    const hoursToAdd = Math.floor(accumulatedMs / 60000);
-    accumulatedMs -= hoursToAdd * 60000;
-    advanceTimeByHours(hoursToAdd);
-    console.log(`Advanced ${hoursToAdd} in-game hour(s). Current hour: ${player.hour}`);
+  // Calculate how many in-game minutes to add (1 in-game minute per 1000 ms real)
+  const minutesToAdd = Math.floor(accumulatedMs / 1000);
+  if (minutesToAdd > 0) {
+    accumulatedMs -= minutesToAdd * 1000;
+    advanceTimeByMinutes(minutesToAdd);
+  } else {
+    // If no minute advanced, still refresh UI so it updates every tick
+    updateStats();
   }
 }
 
@@ -204,6 +218,6 @@ function startGame() {
   lastTickTime = null;
   accumulatedMs = 0;
 
-  // Tick every 10 real seconds
+  // Tick every 10 real seconds (the conversion uses actual elapsed ms so it's robust)
   tickIntervalId = setInterval(tickTime, 10000);
 }
