@@ -24,54 +24,26 @@ document.getElementById("settings-btn").addEventListener("click", () => {
   alert("Settings coming soon");
 });
 
-// CHARACTER CREATION FUNCTIONS
-function chooseGender(g) {
-  playerGender = g;
-  updateCharacterSummary();
-}
-
-function chooseCity(city) {
-  playerCity = city;
-  updateCharacterSummary();
-}
-
-function updateCharacterSummary() {
-  const summary = document.getElementById("char-summary");
-
-  if (playerGender && playerCity) {
-    summary.innerHTML = `
-      You are an 18-year-old ${playerGender} who just moved into an apartment in ${playerCity}.
-    `;
-    document.getElementById("start-game-btn").style.display = "block";
-  } else {
-    summary.innerHTML = "";
-    document.getElementById("start-game-btn").style.display = "none";
-  }
-}
-
-// START GAME BUTTON
-document.getElementById("start-game-btn").addEventListener("click", () => {
-  characterScreen.style.display = "none";
-  gameScreen.style.display = "block";
-  startGame();
-});
+// START / TAX CONFIG
+const TAX_AMOUNT = 1000;
+const TAX_HOUR = 8; // taxes charged at 08:00 each day
 
 // PLAYER STATS
-const TAX_AMOUNT = 1000;
-const TAX_HOUR = 8; // 08:00 each day
-
 const player = {
   money: 10000,
   energy: 100,
   hunger: 0,
   day: 1,
-  hour: 8,    // start at 8 AM
-  minute: 0,  // track minutes now
-  totalSpent: 0, // track total money spent
-  totalEarned: 0 // track total money earned
+  hour: 8,     // start at 08:00
+  minute: 0,
+  second: 0,   // track seconds now
+  totalSpent: 0,
+  totalEarned: 0,
+  lastTaxDay: 1,           // last day taxes were charged (start at current day so we don't charge immediately)
+  energyPenaltyCounter: 0, // counts in-game seconds for energy penalty when hungry
 };
 
-// UPDATE STATS UI (now shows minutes)
+// UPDATE STATS UI (shows HH:MM)
 function updateStats() {
   const stats = document.getElementById("stats");
 
@@ -88,70 +60,84 @@ function updateStats() {
     <p>Total Spent: $${player.totalSpent}</p>
     <p>Energy: ${player.energy}</p>
     <p>Hunger: ${player.hunger}</p>
-    <p>City: ${playerCity}</p>
+    <p>City: ${playerCity || "N/A"}</p>
   `;
 }
 
-// ADVANCE TIME BY MINUTES (rollover minutes -> hours -> days)
-// Now charges taxes at 08:00 each in-game day: $1000 at 08:00
-function advanceTimeByMinutes(minutes = 1) {
-  if (minutes <= 0) {
+// Advance time by a number of in-game seconds.
+// - Adds +10 hunger each in-game hour that passes.
+// - Charges taxes of TAX_AMOUNT at TAX_HOUR:00:00 each day (once per day).
+// - If hunger >= 50, every 5 in-game seconds reduce energy by 1.
+function advanceTimeBySeconds(seconds = 1) {
+  if (seconds <= 0) {
     updateStats();
     return;
   }
 
-  // Compute previous absolute minutes since day 1 start
-  const prevTotalMinutes = (player.day - 1) * 24 * 60 + player.hour * 60 + player.minute;
+  for (let i = 0; i < seconds; i++) {
+    // advance one in-game second
+    player.second += 1;
 
-  // Apply minute advancement
-  player.minute += minutes;
+    if (player.second >= 60) {
+      player.second = 0;
+      player.minute += 1;
+    }
 
-  if (player.minute >= 60) {
-    const extraHours = Math.floor(player.minute / 60);
-    player.minute = player.minute % 60;
-    player.hour += extraHours;
-  }
+    if (player.minute >= 60) {
+      player.minute = 0;
+      player.hour += 1;
 
-  if (player.hour >= 24) {
-    const extraDays = Math.floor(player.hour / 24);
-    player.hour = player.hour % 24;
-    player.day += extraDays;
-    player.energy = 100;
-    player.hunger += 10 * extraDays;
-  }
+      // Each in-game hour -> +10 hunger
+      player.hunger += 10;
+    }
 
-  // Compute new absolute minutes
-  const newTotalMinutes = (player.day - 1) * 24 * 60 + player.hour * 60 + player.minute;
+    if (player.hour >= 24) {
+      player.hour = player.hour % 24;
+      player.day += 1;
+      // Reset energy at new day (existing behavior)
+      player.energy = 100;
+      // When day advances we don't additionally change hunger here (hours already handled)
+    }
 
-  // Determine how many times we've crossed 08:00 (8*60 = 480 minutes offset into each day)
-  // Find integers j such that j*1440 + 480 is in (prevTotalMinutes, newTotalMinutes]
-  const OFFSET = TAX_HOUR * 60; // 480
-  const DAY_MINUTES = 24 * 60;
+    // Tax check: if it's exactly TAX_HOUR:00:00 and we haven't charged for this day yet
+    if (
+      player.hour === TAX_HOUR &&
+      player.minute === 0 &&
+      player.second === 0 &&
+      player.day > player.lastTaxDay
+    ) {
+      player.money -= TAX_AMOUNT;
+      player.totalSpent += TAX_AMOUNT;
+      player.lastTaxDay = player.day;
 
-  const firstJ = Math.floor((prevTotalMinutes - OFFSET) / DAY_MINUTES) + 1;
-  const lastJ = Math.floor((newTotalMinutes - OFFSET) / DAY_MINUTES);
-  let taxCount = Math.max(0, lastJ - firstJ + 1);
+      // Show a temporary notification in the world area (if available)
+      const world = document.getElementById("world");
+      if (world) {
+        const msg = document.createElement("div");
+        msg.className = "tax-msg";
+        msg.style.marginTop = "8px";
+        msg.style.padding = "8px";
+        msg.style.background = "#fff3f3";
+        msg.style.border = "1px solid #f5c2c2";
+        msg.style.borderRadius = "6px";
+        msg.textContent = `Taxes paid at ${TAX_HOUR}:00 — $${TAX_AMOUNT}`;
+        world.appendChild(msg);
+        setTimeout(() => {
+          msg.remove();
+        }, 6000);
+      }
+    }
 
-  if (taxCount > 0) {
-    const taxAmount = TAX_AMOUNT * taxCount;
-    player.money -= taxAmount;
-    player.totalSpent += taxAmount;
-
-    // Show a temporary notification in the world area (if available)
-    const world = document.getElementById("world");
-    if (world) {
-      const msg = document.createElement("div");
-      msg.className = "tax-msg";
-      msg.style.marginTop = "8px";
-      msg.style.padding = "8px";
-      msg.style.background = "#fff3f3";
-      msg.style.border = "1px solid #f5c2c2";
-      msg.style.borderRadius = "6px";
-      msg.textContent = `Taxes paid for ${taxCount} day(s) at ${TAX_HOUR}:00 — $${taxAmount}`;
-      world.appendChild(msg);
-      setTimeout(() => {
-        msg.remove();
-      }, 6000);
+    // Energy penalty when hunger >= 50: every 5 in-game seconds, -1 energy
+    if (player.hunger >= 50) {
+      player.energyPenaltyCounter += 1;
+      if (player.energyPenaltyCounter >= 5) {
+        player.energy = Math.max(0, player.energy - 1);
+        player.energyPenaltyCounter = 0;
+      }
+    } else {
+      // Reset counter if hunger drops below threshold
+      player.energyPenaltyCounter = 0;
     }
   }
 
@@ -219,10 +205,12 @@ function travel(place) {
   updateStats();
 }
 
-// TICK LOGIC: convert real time -> in-game minutes
+// TICK LOGIC: convert real time -> in-game seconds
 // Mapping set so 30 real seconds = 1 in-game hour (60 in-game minutes)
 // => 1 in-game minute = 0.5 real seconds = 500 ms
+// => 1 in-game second = 500 / 60 ms ≈ 8.333... ms
 const MS_PER_INGAME_MINUTE = 500;
+const MS_PER_INGAME_SECOND = MS_PER_INGAME_MINUTE / 60;
 
 let tickIntervalId = null;
 let lastTickTime = null;
@@ -241,19 +229,22 @@ function tickTime() {
   lastTickTime = now;
   accumulatedMs += delta;
 
-  // How many in-game minutes to add?
-  const minutesToAdd = Math.floor(accumulatedMs / MS_PER_INGAME_MINUTE);
-  if (minutesToAdd > 0) {
-    accumulatedMs -= minutesToAdd * MS_PER_INGAME_MINUTE;
-    advanceTimeByMinutes(minutesToAdd);
+  // How many in-game seconds to add?
+  const secondsToAdd = Math.floor(accumulatedMs / MS_PER_INGAME_SECOND);
+  if (secondsToAdd > 0) {
+    accumulatedMs -= secondsToAdd * MS_PER_INGAME_SECOND;
+    advanceTimeBySeconds(secondsToAdd);
   } else {
-    // refresh UI so minutes appear to move (even if not yet a full in-game minute)
+    // refresh UI so minutes appear to move (even if not yet a full in-game second)
     updateStats();
   }
 }
 
 // START GAME FUNCTION
 function startGame() {
+  // Ensure lastTaxDay is initialized to current day so we don't charge immediately
+  player.lastTaxDay = player.day;
+
   updateStats();
   renderMap();
   travel("apartment");
