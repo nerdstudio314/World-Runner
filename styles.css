@@ -42,3 +42,107 @@ button {
   font-size: 16px;
   cursor: pointer;
 }
+
+/* Small layout tweaks */
+#stats p {
+  margin: 6px 0;
+  font-size: 14px;
+}
+
+/* world area */
+#world {
+  min-height: 120px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+/* 360 viewer */
+.viewer {
+  margin-top: 12px;
+}
+.viewer iframe {
+  width: 320px;
+  height: 180px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  display: block;
+  margin: 0 auto;
+}
+.viewer.placeholder {
+  width: 320px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  border-radius: 8px;
+  border: 1px dashed #ccc;
+  margin: 0 auto;
+  padding: 10px;
+  background: #fafafa;
+}
+
+/* Job chooser overlay */
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none; /* shown/hidden by JS */
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+}
+.overlay .overlay-content {
+  background: #fff;
+  padding: 20px;
+  width: 320px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+.job-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 12px 0;
+}
+.job-btn {
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* World notifications (hour/hunger/taxes/energy messages) */
+.world-msg,
+.tax-msg {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fffef0;
+  border: 1px solid #efe0b0;
+  border-radius: 6px;
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
+  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+
+/* small responsive tweak for narrower screens */
+@media (max-width: 380px) {
+  #game-screen {
+    width: 92%;
+    padding: 16px;
+  }
+
+  .viewer iframe,
+  .viewer.placeholder,
+  .overlay .overlay-content {
+    width: 92%;
+    height: auto;
+  }
+}
