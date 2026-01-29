@@ -1,69 +1,97 @@
-// (updated main.js)
-console.log("World Runner JS loaded");
+// defensive main.js (added guards + error reporting)
+console.log("World Runner JS loaded (defensive)");
 
-// SCREEN ELEMENTS
-const titleScreen = document.getElementById("title-screen");
-const characterScreen = document.getElementById("character-screen");
-const gameScreen = document.getElementById("game-screen");
+/* --- Helpers --- */
+function $id(id) {
+  return document.getElementById(id);
+}
+function safeAddListener(id, event, handler) {
+  const el = $id(id);
+  if (!el) {
+    console.warn(`Element #${id} not found — listener for "${event}" not attached.`);
+    return;
+  }
+  el.addEventListener(event, handler);
+}
+function showPageError(msg) {
+  console.error(msg);
+  const world = $id("world");
+  if (world) {
+    const e = document.createElement("div");
+    e.className = "world-msg";
+    e.textContent = `Error: ${msg}`;
+    world.appendChild(e);
+  } else {
+    // fallback alert so user notices
+    // (avoid spamming alert in loops)
+    if (!window._pageErrorShown) {
+      alert(`Error: ${msg}`);
+      window._pageErrorShown = true;
+    }
+  }
+}
 
-// PLAYER CREATION DATA
+/* global error listener -> show in page for visibility */
+window.addEventListener("error", (ev) => {
+  showPageError(ev.message || "Unknown JS error");
+});
+
+/* --- Screen Elements (guarded) --- */
+const titleScreen = $id("title-screen");
+const characterScreen = $id("character-screen");
+const gameScreen = $id("game-screen");
+
+/* --- Player creation data --- */
 let playerGender = null;
 let playerCity = null;
 
-// OFFLINE BUTTON → GO TO CHARACTER CREATION
-document.getElementById("offline-btn").addEventListener("click", () => {
-  titleScreen.style.display = "none";
-  characterScreen.style.display = "block";
+/* --- Attach main buttons safely --- */
+safeAddListener("offline-btn", "click", () => {
+  if (titleScreen) titleScreen.style.display = "none";
+  if (characterScreen) characterScreen.style.display = "block";
 });
+safeAddListener("online-btn", "click", () => alert("Online mode coming soon"));
+safeAddListener("settings-btn", "click", () => alert("Settings coming soon"));
 
-// ONLINE + SETTINGS PLACEHOLDERS
-document.getElementById("online-btn").addEventListener("click", () => {
-  alert("Online mode coming soon");
-});
-
-document.getElementById("settings-btn").addEventListener("click", () => {
-  alert("Settings coming soon");
-});
-
-// TAX & TIMING CONFIG
+/* --- TAX & TIMING CONFIG --- */
 const TAX_AMOUNT = 1000;
 const TAX_HOUR = 8; // taxes charged at 08:00 each day
 
-// PLAYER STATS
+/* --- PLAYER STATS --- */
 const player = {
   money: 10000,
   energy: 100,
   hunger: 0,
   day: 1,
-  hour: 8,     // start at 08:00
+  hour: 8,
   minute: 0,
   second: 0,
   totalSpent: 0,
   totalEarned: 0,
-  lastTaxDay: 1,           // last day taxes were charged
-  energyPenaltyCounter: 0, // counts in-game seconds for energy penalty when hungry
+  lastTaxDay: 1,
+  energyPenaltyCounter: 0,
 };
 
-// small function to post temporary notifications in the world area (helpful to see events)
+/* --- Small helper to post messages in world area --- */
 function postWorldMessage(text, timeout = 5000) {
-  const world = document.getElementById("world");
+  const world = $id("world");
   if (!world) return;
   const msg = document.createElement("div");
   msg.className = "world-msg";
   msg.style.marginTop = "8px";
   msg.style.padding = "8px";
-  msg.style.background = "#fffef0";
-  msg.style.border = "1px solid #efe0b0";
-  msg.style.borderRadius = "6px";
   msg.textContent = text;
   world.appendChild(msg);
   setTimeout(() => msg.remove(), timeout);
 }
 
-// UPDATE STATS UI (shows HH:MM)
+/* --- Update Stats (guarded) --- */
 function updateStats() {
-  const stats = document.getElementById("stats");
-
+  const stats = $id("stats");
+  if (!stats) {
+    console.warn("#stats not found — cannot update stats UI.");
+    return;
+  }
   const hh = player.hour.toString().padStart(2, "0");
   const mm = player.minute.toString().padStart(2, "0");
   const formattedTime = `${hh}:${mm}`;
@@ -81,80 +109,45 @@ function updateStats() {
   `;
 }
 
-// Advance time by a number of in-game seconds.
-// - Adds +10 hunger each in-game hour that passes.
-// - Charges taxes of TAX_AMOUNT at TAX_HOUR:00:00 each day (once per day).
-// - If hunger >= 50, every 5 in-game seconds reduce energy by 1.
-function advanceTimeBySeconds(seconds = 1) {
-  if (seconds <= 0) {
-    updateStats();
+/* --- Character creation functions (must be global for inline onclicks) --- */
+window.chooseGender = function (g) {
+  playerGender = g;
+  updateCharacterSummary();
+};
+window.chooseCity = function (city) {
+  playerCity = city;
+  updateCharacterSummary();
+};
+
+function updateCharacterSummary() {
+  const summary = $id("char-summary");
+  const startBtn = $id("start-game-btn");
+  if (!summary) {
+    console.warn("#char-summary not found — skipping updateCharacterSummary UI update.");
     return;
   }
 
-  // We'll advance in a per-second loop (seconds per tick are usually small;
-  // this keeps logic simple and makes hunger/energy transitions precise).
-  for (let i = 0; i < seconds; i++) {
-    // advance one in-game second
-    player.second += 1;
-
-    if (player.second >= 60) {
-      player.second = 0;
-      player.minute += 1;
-    }
-
-    // hour rollover
-    if (player.minute >= 60) {
-      player.minute = 0;
-      player.hour += 1;
-
-      // Each in-game hour -> +10 hunger
-      player.hunger += 10;
-      postWorldMessage(`Hour passed: hunger +10 -> ${player.hunger}`, 3000);
-    }
-
-    // day rollover
-    if (player.hour >= 24) {
-      player.hour = player.hour % 24;
-      player.day += 1;
-      player.energy = 100; // reset energy at new day (existing behavior)
-      // don't change hunger here (hours already handled)
-    }
-
-    // Tax check: if it's exactly TAX_HOUR:00:00 and we haven't charged for this day yet
-    if (
-      player.hour === TAX_HOUR &&
-      player.minute === 0 &&
-      player.second === 0 &&
-      player.day > player.lastTaxDay
-    ) {
-      player.money -= TAX_AMOUNT;
-      player.totalSpent += TAX_AMOUNT;
-      player.lastTaxDay = player.day;
-      postWorldMessage(`Taxes paid at ${TAX_HOUR}:00 — $${TAX_AMOUNT}`, 5000);
-    }
-
-    // Energy penalty when hunger >= 50: every 5 in-game seconds, -1 energy
-    if (player.hunger >= 50) {
-      player.energyPenaltyCounter += 1;
-      if (player.energyPenaltyCounter >= 5) {
-        player.energy = Math.max(0, player.energy - 1);
-        player.energyPenaltyCounter = 0;
-        postWorldMessage(`Energy -1 due to hunger (hunger=${player.hunger}). Energy=${player.energy}`, 2500);
-      }
-    } else {
-      // reset counter if hunger drops below threshold
-      player.energyPenaltyCounter = 0;
-    }
+  if (playerGender && playerCity) {
+    summary.innerHTML = `You are an 18-year-old ${playerGender} who just moved into an apartment in ${playerCity}.`;
+    if (startBtn) startBtn.style.display = "block";
+  } else {
+    summary.innerHTML = "";
+    if (startBtn) startBtn.style.display = "none";
   }
-
-  updateStats();
 }
 
-// MAP LOCATIONS
+/* --- Start game (safe attach) --- */
+safeAddListener("start-game-btn", "click", () => {
+  if (characterScreen) characterScreen.style.display = "none";
+  if (gameScreen) gameScreen.style.display = "block";
+  startGame();
+});
+
+/* --- Locations --- */
 const locations = {
   apartment: {
     name: "Your Apartment",
-    description: () => `A small starter apartment in ${playerCity}.`
+    description: () => `A small starter apartment in ${playerCity || "a city"}.`
   },
   city: {
     name: "City Center",
@@ -172,9 +165,14 @@ const locations = {
 
 let currentLocation = "apartment";
 
-// RENDER MAP BUTTONS
+/* --- Render map (guarded) --- */
 function renderMap() {
-  const map = document.getElementById("map");
+  const map = $id("map");
+  if (!map) {
+    console.warn("#map not found — cannot render map.");
+    return;
+  }
+  // Buttons shown as actual elements so their listeners work
   map.innerHTML = `
     <h3>Map</h3>
     <button class="map-button" onclick="travel('apartment')">Apartment</button>
@@ -184,13 +182,17 @@ function renderMap() {
   `;
 }
 
-// TRAVEL FUNCTION (money: work +$10; other places -$20)
-function travel(place) {
+/* --- Travel (guarded) --- */
+window.travel = function (place) {
+  if (!place) {
+    console.warn("travel called with no place");
+    return;
+  }
   currentLocation = place;
 
   let changeAmount = 0;
   if (place === "work") {
-    changeAmount = 10; // earnings
+    changeAmount = 10;
     player.money += changeAmount;
     player.totalEarned += changeAmount;
   } else if (place === "store" || place === "apartment" || place === "city") {
@@ -202,20 +204,75 @@ function travel(place) {
     player.totalSpent += Math.abs(changeAmount);
   }
 
-  const world = document.getElementById("world");
-  world.innerHTML = `
-    <h3>${locations[place].name}</h3>
-    <p>${locations[place].description()}</p>
-  `;
+  const world = $id("world");
+  if (world) {
+    world.innerHTML = `
+      <h3>${locations[place].name}</h3>
+      <p>${locations[place].description()}</p>
+    `;
+  } else {
+    console.warn("#world not found — cannot update world text.");
+  }
+
+  updateStats();
+};
+
+/* --- Time / Hunger / Energy / Taxes logic --- */
+function advanceTimeBySeconds(seconds = 1) {
+  if (seconds <= 0) {
+    updateStats();
+    return;
+  }
+
+  for (let i = 0; i < seconds; i++) {
+    player.second += 1;
+    if (player.second >= 60) {
+      player.second = 0;
+      player.minute += 1;
+    }
+    if (player.minute >= 60) {
+      player.minute = 0;
+      player.hour += 1;
+      player.hunger += 10;
+      postWorldMessage(`Hour passed: hunger +10 -> ${player.hunger}`, 3000);
+    }
+    if (player.hour >= 24) {
+      player.hour = player.hour % 24;
+      player.day += 1;
+      player.energy = 100;
+    }
+
+    // taxes at TAX_HOUR:00:00 once per day
+    if (
+      player.hour === TAX_HOUR &&
+      player.minute === 0 &&
+      player.second === 0 &&
+      player.day > player.lastTaxDay
+    ) {
+      player.money -= TAX_AMOUNT;
+      player.totalSpent += TAX_AMOUNT;
+      player.lastTaxDay = player.day;
+      postWorldMessage(`Taxes paid at ${TAX_HOUR}:00 — $${TAX_AMOUNT}`, 5000);
+    }
+
+    // energy penalty if hunger >= 50: every 5 in-game seconds lose 1 energy
+    if (player.hunger >= 50) {
+      player.energyPenaltyCounter += 1;
+      if (player.energyPenaltyCounter >= 5) {
+        player.energy = Math.max(0, player.energy - 1);
+        player.energyPenaltyCounter = 0;
+        postWorldMessage(`Energy -1 due to hunger. Energy=${player.energy}`, 2500);
+      }
+    } else {
+      player.energyPenaltyCounter = 0;
+    }
+  }
 
   updateStats();
 }
 
-// TICK LOGIC: convert real time -> in-game seconds
-// Mapping set so 30 real seconds = 1 in-game hour (60 in-game minutes)
-// => 1 in-game minute = 0.5 real seconds = 500 ms
-// => 1 in-game second = 500 / 60 ms ≈ 8.333... ms
-const MS_PER_INGAME_MINUTE = 500;
+/* --- Tick logic (mapping: 30 real seconds = 1 in-game hour) --- */
+const MS_PER_INGAME_MINUTE = 500; // 0.5s per in-game minute
 const MS_PER_INGAME_SECOND = MS_PER_INGAME_MINUTE / 60;
 
 let tickIntervalId = null;
@@ -224,42 +281,45 @@ let accumulatedMs = 0;
 
 function tickTime() {
   const now = Date.now();
-
   if (!lastTickTime) {
     lastTickTime = now;
     updateStats();
     return;
   }
-
   const delta = now - lastTickTime;
   lastTickTime = now;
   accumulatedMs += delta;
 
-  // How many in-game seconds to add?
   const secondsToAdd = Math.floor(accumulatedMs / MS_PER_INGAME_SECOND);
   if (secondsToAdd > 0) {
     accumulatedMs -= secondsToAdd * MS_PER_INGAME_SECOND;
     advanceTimeBySeconds(secondsToAdd);
   } else {
-    // refresh UI so minutes appear to move (even if not yet a full in-game second)
     updateStats();
   }
 }
 
-// START GAME FUNCTION
+/* --- Start game (safe) --- */
 function startGame() {
-  // Ensure lastTaxDay is initialized to current day so we don't charge immediately
   player.lastTaxDay = player.day;
 
   updateStats();
   renderMap();
-  travel("apartment");
+  // show apartment without charging
+  try { travel("apartment"); } catch (e) { console.warn(e); }
 
-  // Clear any old interval if present
   if (tickIntervalId) clearInterval(tickIntervalId);
   lastTickTime = null;
   accumulatedMs = 0;
 
-  // Use a short tick so the UI updates smoothly.
   tickIntervalId = setInterval(tickTime, 250);
 }
+window.startGame = startGame;
+
+/* --- Defensive sanity check: confirm required elements exist and warn --- */
+const required = ["offline-btn", "title-screen", "character-screen", "start-game-btn", "stats", "world", "map"];
+required.forEach(id => {
+  if (!$id(id)) {
+    console.warn(`Warning: expected element #${id} not found. Some UI features may not work.`);
+  }
+});
